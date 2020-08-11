@@ -1,3 +1,4 @@
+import itertools
 import json
 import operator
 import random
@@ -9,10 +10,6 @@ from pprint import pprint
 
 def serialize(data):
     return json.dumps(data)
-
-
-def calc_complexity(data):
-    return sys.getsizeof(zlib.compress(json.dumps(data).encode()))
 
 
 def count_nodes(data):
@@ -130,43 +127,67 @@ def simplify_ast(ast):
     return [simplify_ast(e) for e in ast]
 
 
-def synth(tests):
+def add_layer(corpus):
+    out = deepcopy(corpus)
+    for a, b in itertools.product(corpus, repeat=2):
+        out.append(["+", a, b])
+        out.append(["-", a, b])
+        out.append(["*", a, b])
+    return out
+
+
+def deduplicate(corpus):
+    out = {}
+    for ast in corpus:
+        ast = simplify_ast(ast)
+        ast = normalize_ast(ast)
+        out[serialize(ast)] = ast
+    return list(out.values())
+
+
+def get_winner(programs, _inputs, _outputs):
+    winners = []
+    for p in programs:
+        if all(eval(p, i) == o for i, o in zip(_inputs, _outputs)):
+            winners.append(p)
+
+    if not winners:
+        return "FAILED"
+
+    winners = [(count_nodes(p), p) for p in winners]
+    winners = sorted(winners, key=lambda e: e[0])
+    return winners[0][1]
+
+
+def create_seeds(_inputs):
+    programs = []
+    for val in [-1, 0, 1]:
+        p = ["value", val]
+        programs.append(p)
+    for var in _inputs[0].keys():
+        p = ["variable", var]
+        programs.append(p)
+    return programs
+
+
+def pivot_io(tests):
     _inputs = []
     _outputs = []
     for i, o in tests:
         _inputs.append(i)
         _outputs.append(o)
+    return _inputs, _outputs
 
-    goal = serialize(_outputs)
 
-    programs = {"out_to_source": {}, "source_to_ast": {}}
+def synth(tests):
+    _inputs, _outputs = pivot_io(tests)
 
-    for val in range(-2, 3):
-        p = ["value", val]
-        programs = add_to_set(programs, p, _inputs)
-    for _ in range(100):
-        for var in _inputs[0].keys():
-            p = ["variable", var]
-            programs = add_to_set(programs, p, _inputs)
+    programs = create_seeds(_inputs)
 
-    for _ in range(10000):
-        p = ["+", get_random_ast(programs), get_random_ast(programs)]
-        programs = add_to_set(programs, p, _inputs)
-        p = ["-", get_random_ast(programs), get_random_ast(programs)]
-        programs = add_to_set(programs, p, _inputs)
-        p = ["*", get_random_ast(programs), get_random_ast(programs)]
-        programs = add_to_set(programs, p, _inputs)
-    # pprint(programs)
-    # pprint(list(programs.keys()))
-    print(goal)
-    print("\n\n")
-    winners = []
-    for p in programs["out_to_source"].get(goal, set()):
-        winners.append(programs["source_to_ast"][p])
+    for _ in range(2):
+        programs = add_layer(programs)
+        programs = deduplicate(programs)
 
-    if len(winners) > 0:
-        winners = [(count_nodes(p), p) for p in winners]
-        winners = sorted(winners, key=lambda e: e[0])
-        print(winners[0][0])
-        pprint(winners[0][1])
-        print("\n\n")
+    pprint(get_winner(programs, _inputs, _outputs))
+
+    return None

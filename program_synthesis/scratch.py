@@ -1,9 +1,6 @@
 import itertools
 import json
 import operator
-import random
-import sys
-import zlib
 from copy import deepcopy
 from pprint import pprint
 
@@ -15,10 +12,7 @@ def serialize(data):
 def count_nodes(data):
     if not isinstance(data, list):
         return 1
-    out = 0
-    for e in data:
-        out += count_nodes(e)
-    return out
+    return sum(count_nodes(e) for e in data)
 
 
 def eval(ast, _in):
@@ -42,39 +36,7 @@ def contains_nonconstant(ast):
         return False
     if ast[0] == "variable":
         return True
-    out = False
-    for e in ast:
-        out = out or contains_nonconstant(e)
-    return out
-
-
-def add_to_set(programs, ast, inputs):
-    ast = simplify_ast(ast)
-    ast = normalize_ast(ast)
-
-    if count_nodes(ast) > 20:
-        return programs
-
-    outputs = [eval(ast, i) for i in inputs]
-    if min(outputs) < -20 or max(outputs) > 20:
-        return programs
-
-    s_outputs = serialize(outputs)
-    s_ast = serialize(ast)
-
-    if s_outputs not in programs["out_to_source"]:
-        programs["out_to_source"][s_outputs] = set()
-    programs["out_to_source"][s_outputs].add(s_ast)
-
-    if s_ast not in programs["source_to_ast"]:
-        programs["source_to_ast"][s_ast] = {}
-    programs["source_to_ast"][s_ast] = ast
-
-    return programs
-
-
-def get_random_ast(programs):
-    return random.choice(list(programs["source_to_ast"].values()))
+    return any(contains_nonconstant(e) for e in ast)
 
 
 def normalize_ast(ast):
